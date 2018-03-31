@@ -21,6 +21,7 @@ firebase.initializeApp(config);
 const GET_CHALLENGE_ACTION = 'get_challenge';
 const GET_RANKING_ACTION = 'get_ranking';
 const POST_LOCATION_ACTION = 'post_location';
+const PERMISSION_LOCATION_ACTION = 'location_info';
 // b. the parameters that are parsed from the make_name intent
 const CHARACTER_ARGUMENT = 'Character';
 
@@ -41,12 +42,17 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
     let score = 0;
     return firebase.database().ref('users/' + userId).once('value').then((snapshot) => {
       let score = snapshot.child("score").val() === null ? 0 : snapshot.child("score").val();
-      firebase.database().ref('users/' + userId).update({
-        target: location,
-        score: score,
-      });
-      app.tell("<speak>Your new target location is " + location + ". Go there and say, Okay Google, I'm here. Happy hunting!</speak>");
-      return true;
+      if (snapshot.child("target").val()) {
+        app.tell("<speak>Your current target location is " + snapshot.child("target").val() + ". Go there and say, Okay Google, I'm here. Happy hunting!</speak>");
+        return true;
+      } else {
+        firebase.database().ref('users/' + userId).update({
+          target: location,
+          score: score,
+        });
+        app.tell("<speak>Your new target location is " + location + ". Go there and say, Okay Google, I'm here. Happy hunting!</speak>");
+        return true;
+      }
     });
   }
 
@@ -73,6 +79,18 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
   }
 
   function postLocation (app) {
+    // Ask for one permission
+    console.log("REQUESTING PERMISSION...");
+    app.askForPermission('To see if you found the OSU location', app.SupportedPermissions.DEVICE_PRECISE_LOCATION);
+    console.log("TRIGGERING FOLOWUP...");
+  }
+
+  function permissionLocation (app) {
+    console.log("FOLLOW UP TRIGGERED");
+    // Ask for one permission
+    if (app.isPermissionGranted()) {
+      app.ask("<speak>Location GRANTED. </speak>");
+    }
     app.ask("<speak>Location Post Endpoint. " + ASK_MORE + "</speak>");
   }
 
@@ -81,6 +99,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
   actionMap.set(GET_CHALLENGE_ACTION, makeChallenge);
   actionMap.set(GET_RANKING_ACTION, makeRanking);
   actionMap.set(POST_LOCATION_ACTION, postLocation);
+  actionMap.set(PERMISSION_LOCATION_ACTION, permissionLocation);
 
 app.handleRequest(actionMap);
 });
