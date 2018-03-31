@@ -37,14 +37,12 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
 
   // c. The function that generates the workout
   function makeChallenge (app) {
-    let locationArray = ["the Ohio Union", "the RPAC", "the Shoe", "the ARC", "Thompson Library", "18th Avenue Library", "Dreese Labs", "Traditions at Scott"];
-    let location = locationArray[Math.floor(Math.random()*locationArray.length)];
     let score = 0;
     return firebase.database().ref('users/' + userId).once('value').then((snapshot) => {
       let score = snapshot.child("score").val() === null ? 0 : snapshot.child("score").val();
-      let currentLocation = snapshot.child("target").child("name").val();
+      let currentLocation = snapshot.child("target").child("name").val() === null ? "" : snapshot.child("target").child("name").val();
       if (currentLocation !== "") {
-        app.tell("<speak>Your current target location is " + currentLocation + ". Go there and say, Okay Google, I'm here. Happy hunting!</speak>");
+        app.tell("<speak>Your current target location is " + currentLocation + ". Go there and say, Okay Google, tell Buck I Spy I'm here. Happy hunting!</speak>");
         return true;
       } else {
         return firebase.database().ref('locations/').once('value').then((snapshot) => {
@@ -57,7 +55,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                 longitude: location.child("longitude").val(),
                 name: location.key,
               });
-              app.tell("<speak>Your new target location is " + location.key + ". Go there and say, Okay Google, I'm here. Happy hunting!</speak>");
+              app.tell("<speak>Your new target location is " + location.key + ". Go there and say, Okay Google, tell Buck I Spy I'm here. Happy hunting!</speak>");
             }
             i++;
           });
@@ -118,7 +116,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
         var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
         var distance = R * c * 0.000621371;
-        if (distance < 0.25) {
+        if (distance < 0.05) {
           firebase.database().ref('users/' + userId ).update({
             score: score + 10,
             target: {
