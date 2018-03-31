@@ -42,16 +42,27 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
     let score = 0;
     return firebase.database().ref('users/' + userId).once('value').then((snapshot) => {
       let score = snapshot.child("score").val() === null ? 0 : snapshot.child("score").val();
-      if (snapshot.child("target").val()) {
-        app.tell("<speak>Your current target location is " + snapshot.child("target").val() + ". Go there and say, Okay Google, I'm here. Happy hunting!</speak>");
+      let currentLocation = snapshot.child("target").child("name").val();
+      if (currentLocation !== "") {
+        app.tell("<speak>Your current target location is " + currentLocation + ". Go there and say, Okay Google, I'm here. Happy hunting!</speak>");
         return true;
       } else {
-        firebase.database().ref('users/' + userId).update({
-          target: location,
-          score: score,
+        return firebase.database().ref('locations/').once('value').then((snapshot) => {
+          let locationIndex = Math.floor(Math.random()*snapshot.numChildren());
+          let i = 0;
+          snapshot.forEach((location) => {
+            if (i === locationIndex) {
+              firebase.database().ref('users/' + userId + '/target').update({
+                latitude: location.child("latitude").val(),
+                longitude: location.child("longitude").val(),
+                name: location.key,
+              });
+              app.tell("<speak>Your new target location is " + location.key + ". Go there and say, Okay Google, I'm here. Happy hunting!</speak>");
+            }
+            i++;
+          });
+          return true;
         });
-        app.tell("<speak>Your new target location is " + location + ". Go there and say, Okay Google, I'm here. Happy hunting!</speak>");
-        return true;
       }
     });
   }
@@ -78,9 +89,11 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
   }
 
   function postLocation (app) {
-    // Ask for one permission
-    app.askForPermission('To see if you found the OSU location', app.SupportedPermissions.DEVICE_PRECISE_LOCATION);
-    return true;
+    return firebase.database().ref('users/' + userId + "/target").once('value').then((snapshot) => {
+      // Ask for one permission
+      app.askForPermission('To see if you found ' + snapshot.child("name").val(), app.SupportedPermissions.DEVICE_PRECISE_LOCATION);
+      return true;
+    });
   }
 
   function permissionLocation (app) {
@@ -88,11 +101,36 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
     if (app.isPermissionGranted()) {
       const latitude = app.getDeviceLocation().coordinates.latitude;
       const longitude = app.getDeviceLocation().coordinates.longitude;
-      return firebase.database().ref('users/' + userId + '/target/').once('value').then((snapshot) => {
-        let targetLatitude = snapshot.child("latitude").val();
-        let targetLongitude = snapshot.child("longitude").val();
-        let distance = Math.sqrt(Math.pow(targetLatitude - latitude, 2) + Math.pow(targetLongitude - longitude, 2));
-        app.tell("<speak>You are at latitude " + latitude + " and longitude " + longitude + ". Your target latitude is " + targetLatitude + " and your target longitude is " + targetLongitude + ". You are " + distance + " degrees away </speak>");
+      return firebase.database().ref('users/' + userId).once('value').then((snapshot) => {
+        let targetLatitude = snapshot.child("target").child("latitude").val();
+        let targetLongitude = snapshot.child("target").child("longitude").val();
+        let targetLocation = snapshot.child("target").child("name").val();
+        let score = snapshot.child("score").val();
+        var R = 6371e3; // metres
+        var φ1 = targetLatitude * Math.PI / 180;
+        var φ2 = latitude * Math.PI / 180;
+        var Δφ = (latitude-targetLatitude) * Math.PI / 180;
+        var Δλ = (longitude-targetLongitude) * Math.PI / 180;
+
+        var a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ/2) * Math.sin(Δλ/2);
+        var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+        var distance = R * c * 0.000621371;
+        if (distance < 0.25) {
+          firebase.database().ref('users/' + userId ).update({
+            score: score + 10,
+            target: {
+              latitude: targetLatitude,
+              longitude: targetLongitude,
+              name: "",
+            }
+          });
+          app.tell("<speak>You found " + targetLocation +"! Here's 10 points for showing up. Open the Buck I Spy mobile app to take a picture and earn even more points! </speak>");
+        } else {
+          app.tell("<speak>You are " + distance.toFixed(2) + " miles away from " + targetLocation + ". Get closer and try again.</speak>");
+        }
         return true;
       });
     } else {
