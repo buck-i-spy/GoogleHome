@@ -69,7 +69,6 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
           userScore = score;
           console.log("user id:" + user.key);
         }
-        console.log(user.key + " RANK: " + rank + "score: " + score);
         rank--;
       });
       let playerCount = snapshot.numChildren();
@@ -80,18 +79,26 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
 
   function postLocation (app) {
     // Ask for one permission
-    console.log("REQUESTING PERMISSION...");
     app.askForPermission('To see if you found the OSU location', app.SupportedPermissions.DEVICE_PRECISE_LOCATION);
-    console.log("TRIGGERING FOLOWUP...");
+    return true;
   }
 
   function permissionLocation (app) {
-    console.log("FOLLOW UP TRIGGERED");
     // Ask for one permission
     if (app.isPermissionGranted()) {
-      app.ask("<speak>Location GRANTED. </speak>");
+      const latitude = app.getDeviceLocation().coordinates.latitude;
+      const longitude = app.getDeviceLocation().coordinates.longitude;
+      return firebase.database().ref('users/' + userId + '/target/').once('value').then((snapshot) => {
+        let targetLatitude = snapshot.child("latitude").val();
+        let targetLongitude = snapshot.child("longitude").val();
+        let distance = Math.sqrt(Math.pow(targetLatitude - latitude, 2) + Math.pow(targetLongitude - longitude, 2));
+        app.tell("<speak>You are at latitude " + latitude + " and longitude " + longitude + ". Your target latitude is " + targetLatitude + " and your target longitude is " + targetLongitude + ". You are " + distance + " degrees away </speak>");
+        return true;
+      });
+    } else {
+      app.tell("<speak>Location Post Endpoint. " + ASK_MORE + "</speak>");
+      return true;
     }
-    app.ask("<speak>Location Post Endpoint. " + ASK_MORE + "</speak>");
   }
 
   // d. build an action map, which maps intent names to functions
