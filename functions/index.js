@@ -38,14 +38,38 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
   function makeChallenge (app) {
     let locationArray = ["the Ohio Union", "the RPAC", "the Shoe", "the ARC", "Thompson Library", "18th Avenue Library", "Dreese Labs", "Traditions at Scott"];
     let location = locationArray[Math.floor(Math.random()*locationArray.length)];
-    firebase.database().ref('users/' + userId).update({
-      target: location,
+    let score = 0;
+    return firebase.database().ref('users/' + userId).once('value').then((snapshot) => {
+      let score = snapshot.child("score").val() === null ? 0 : snapshot.child("score").val();
+      firebase.database().ref('users/' + userId).update({
+        target: location,
+        score: score,
+      });
+      app.tell("<speak>Your new target location is " + location + ". Go there and say, Okay Google, I'm here. Happy hunting!</speak>");
+      return true;
     });
-    app.ask("<speak>Your new target location is " + location + ". Go there and say, Okay Google, I'm here. Happy hunting!</speak>");
   }
 
   function makeRanking (app) {
-    app.ask("<speak>Ranking Endpoint. " + ASK_MORE + "</speak>");
+    let rankingRef = firebase.database().ref('users/').orderByChild('score');
+    return rankingRef.once('value').then((snapshot) => {
+      let rank = snapshot.numChildren();
+      let userRank = 0;
+      let userScore = 0;
+      snapshot.forEach((user) => {
+        let score = user.child("score").val();
+        if (user.key === userId) {
+          userRank = rank;
+          userScore = score;
+          console.log("user id:" + user.key);
+        }
+        console.log(user.key + " RANK: " + rank + "score: " + score);
+        rank--;
+      });
+      let playerCount = snapshot.numChildren();
+      app.tell("<speak>Your rank is " + userRank + " of " + playerCount + " total players with a score of " + userScore + ".</speak>");
+      return true;
+    });
   }
 
   function postLocation (app) {
